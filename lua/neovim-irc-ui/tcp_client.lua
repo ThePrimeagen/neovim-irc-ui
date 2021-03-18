@@ -51,13 +51,16 @@ function IrcClient:_get_ip(host)
 end
 
 function IrcClient:_connect_to_irc()
+    print("TCP#connect_to_irc FIRST LINE")
     self.client = vim.loop.new_tcp()
 
     local ip = self:_get_ip(self.host)
 
     self.state = states.connecting
 
+    print("TCP#connect_to_irc", ip, self.host)
     self.client:connect(ip, tonumber(self.port), function (err)
+        print("CONNECTED!!", ip, self.host)
         if self.state ~= states.connecting then
             return
         end
@@ -76,7 +79,6 @@ function IrcClient:_connect_to_irc()
                 return
             end
             self:_callback("data", chunk)
-
         end))
 
         self:_callback("connect", nil);

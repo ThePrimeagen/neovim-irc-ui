@@ -2,54 +2,7 @@ local TcpClient = require("neovim-irc-ui.tcp_client")
 local Path = require("plenary.path")
 local path_to_data = string.format("%s/%s", vim.fn.stdpath("data"), "theprimeagen-neovim-irc.json")
 
-NeovimIrcData = NeovimIrcData or {}
-
-NircWinId = NircWinId or nil
-NircBufnr = NircBufnr or nil
-NircClient = NircClient or nil
-
-local M = {}
-
-local function create_win_thanks_anttttt(options)
-    local default_options = {
-        relative = 'editor',
-        style = 'minimal',
-        width = 30,
-        height = 15,
-        row = 2,
-        col = 2,
-    }
-    options = vim.tbl_extend('keep', options or {}, default_options)
-
-    if not NircBufnr or not vim.api.nvim_buf_is_valid(NircBufnr) then
-        NircBufnr = options.bufnr or vim.fn.nvim_create_buf(false, true)
-    end
-
-    if not NircWinId or not vim.api.nvim_buf_is_valid(NircWinId) then
-        NircWinId = vim.fn.nvim_open_win(NircBufnr, true, options)
-    end
-
-    vim.api.nvim_win_set_buf(NircWinId, NircBufnr)
-end
-
-
-local function process_irc_msg(line)
-    print("process_irc_msg", line)
-end
-
-local function refresh_data()
-    local ok = pcall(function()
-        NeovimIrcData = vim.fn.json_decode(Path:new(path_to_data):read())
-    end)
-
-    if not ok then
-        NeovimIrcData = {}
-    end
-end
-
-local punc = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~"
-local alpha_numeric = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-
+--[[
 local function move_cursor_to_end()
     if not vim.api.nvim_buf_is_valid(NircBufnr) or
        not vim.api.nvim_win_is_valid(NircWinId) then
@@ -60,14 +13,20 @@ local function move_cursor_to_end()
     vim.api.nvim_win_set_cursor(NircWinId, {line_count - 1, 0})
 end
 
-local function write_to_window(lines)
-    if not vim.api.nvim_buf_is_valid(NircBufnr) then
-        return
-    end
+local function refresh_data(client)
+    local ok = pcall(function()
+        NeovimIrcData = vim.fn.json_decode(Path:new(path_to_data):read())
+    end)
 
-    vim.api.nvim_buf_set_lines(NircBufnr, -1, -1, false, lines)
-    move_cursor_to_end()
+    if not ok then
+        NeovimIrcData = {}
+    end
 end
+
+--]]
+
+local punc = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~"
+local alpha_numeric = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 local function valid_text(text)
     if text == nil or type(text) ~= "string" or #text == 0 then
@@ -75,7 +34,9 @@ local function valid_text(text)
     end
 
     for idx = 1, #text do
-        local char = text:sub(idx, idx) 
+        local char = text:sub(idx, idx)
+        print("Char", idx, "is", char, " :: ", punc:match(char), " == nil and ", alpha_numeric:match(char), " == nil")
+
         -- SORRY FOR INLINE RETURNING...
         if punc:match(char) == nil and alpha_numeric:match(char) == nil then
             return false
@@ -90,6 +51,7 @@ local function get_valid_text(question, reprompt)
     repeat
         text = vim.fn.input(question)
 
+        print("WHAT WAS MY TEXT", text)
         if not valid_text(text) then
             error("Please provide valid text (a-Z and punc)")
             text = nil
@@ -100,20 +62,23 @@ local function get_valid_text(question, reprompt)
     return text
 end
 
-local function listen_to_client()
-    NircClient:on("connect", function(err)
+
+local function listen_to_client(client)
+    print("Attempting to connect to the client")
+    client.ircClient:on("connect", function(err)
+        print("Connected to the client")
         if err ~= nil then
             print("ERROR", err)
             error("Unable to connect to theprimeagen's irc server.")
-            M.disconnect()
+            client:disconnect()
             return
         end
 
-        refresh_data()
+        -- refresh_data()
 
         vim.schedule(function()
-            create_win_thanks_anttttt()
-            write_to_window({
+            client:create_win_thanks_anttttt()
+            client:write_to_window({
                 "",
                 "",
                 " Welcome to ThePrimeagen's IRC",
@@ -121,37 +86,95 @@ local function listen_to_client()
                 "",
             })
 
-            if NeovimIrcData.name == nil then
-                NeovimIrcData.name = get_valid_text("IRC Name? ", true)
+            if client.name == nil then
+                client.name = get_valid_text("IRC Name? ", true)
             end
 
-            NircClient:join(NeovimIrcData.name)
+            client.ircClient:join(client.name)
         end)
     end)
 
-    NircClient:on("data", function(line)
+    client.ircClient:on("data", function(line)
         -- Aggregate the irc chat
-        process_irc_msg(line)
+        client:process_irc_msg(line)
     end)
 
-    NircClient:on("disconnect", M.on_tcp_close)
+    client.ircClient:on("disconnect", function() client:on_tcp_close() end)
 end
 
-M.open_irc = function() if NircClient == nil then
-    if NircClient == nil then
-        NircClient = TcpClient:new("irc.theprimeagen.tv", 1337)
-        listen_to_client()
+local Client = {}
+function Client:new(offset, name)
+    local obj = {
+        neovimIrcData = {},
+        ircWinId = nil,
+        ircBufnr = nil,
+        ircClient = nil,
+        name = name,
+        win_id = nil,
+        buf_nr = nil,
+        x_offset = offset
+    }
+
+    setmetatable(obj, self)
+    self.__index = self
+
+    return obj
+end
+
+function Client:on_tcp_close()
+    print("THIS?? IS CLOSEDDD%%!!!!")
+end
+
+function Client:create_win_thanks_anttttt(options)
+    local default_options = {
+        relative = 'editor',
+        style = 'minimal',
+        width = 30,
+        height = 15,
+        row = 2,
+        col = self.x_offset + 2,
+    }
+    options = vim.tbl_extend('keep', options or {}, default_options)
+
+    if not self.bufnr or not vim.api.nvim_buf_is_valid(self.bufnr) then
+        -- annnnttttt THANKS FOR FN
+        self.bufnr = options.bufnr or vim.api.nvim_create_buf(false, true)
+    end
+
+    if not self.win_id or not vim.api.nvim_buf_is_valid(self.win_id) then
+        -- annnnttttt THANKS FOR FN
+        self.win_id = vim.api.nvim_open_win(self.bufnr, true, options)
+    end
+
+    vim.api.nvim_win_set_buf(NircWinId, self.bufnr)
+end
+
+
+function Client:write_to_window(lines)
+    if not vim.api.nvim_buf_is_valid(self.bufnr) then
+        return
+    end
+
+    vim.api.nvim_buf_set_lines(self.bufnr, -1, -1, false, lines)
+    -- // DO THIS LATER
+    -- move_cursor_to_end()
+end
+
+
+function Client:process_irc_msg(line)
+    print("process_irc_msg", line)
+end
+
+function Client:open_irc()
+    print("Self client", self.ircClient)
+    if self.ircClient == nil then
+        self.ircClient = TcpClient:new("irc.theprimeagen.tv", 1337)
+        self.ircClient:connect()
+        listen_to_client(self)
     end
 end
 
-if NircClient:isConnected() and NircWinId == nil then
-    create_win_thanks_anttttt()
-    elseif not NircClient:isConnected() then
-        NircClient:connect()
-    end
-end
-
-M.close_irc_win = function()
+function Client:close_irc_win()
     if NircWinId == nil then
         return
     end
@@ -160,16 +183,16 @@ M.close_irc_win = function()
     NircWinId = nil
 end
 
-M.disconnect = function()
-    M.close_irc_win()
-    if NircClient == nil then
+function Client:disconnect()
+    self.close_irc_win()
+    if self.ircClient == nil then
         return
     end
-    NircClient:disconnect()
+    self.ircClient:disconnect()
 end
 
-M.write = function()
-    if not NircClient:isConnected() then
+function Client:write()
+    if not self.ircClient:isConnected() then
         error("You are not connected, please call M.open_irc")
     end
 
@@ -178,7 +201,7 @@ M.write = function()
         return
     end
 
-    NircClient:msg(NeovimIrcData.name, text)
+    self.ircClient:msg(self.name, text)
 end
 
-return M
+return Client
