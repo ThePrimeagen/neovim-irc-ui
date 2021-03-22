@@ -6,9 +6,9 @@ local states = {
     timedout = 5,
 }
 
-local IrcClient = {}
+local TcpClient = {}
 
-function IrcClient:new(host, port)
+function TcpClient:new(host, port)
     local obj = {
         host = host,
         port = port,
@@ -23,11 +23,11 @@ function IrcClient:new(host, port)
     return obj
 end
 
-function IrcClient:isConnected()
+function TcpClient:isConnected()
     return self.state == states.connected
 end
 
-function IrcClient:_callback(event, ...)
+function TcpClient:_callback(event, ...)
     if self.callbacks[event] == nil then
         return;
     end
@@ -36,7 +36,7 @@ function IrcClient:_callback(event, ...)
     end
 end
 
-function IrcClient:_get_ip(host)
+function TcpClient:_get_ip(host)
     local results = vim.loop.getaddrinfo(host)
     local actual_addr = nil
 
@@ -50,17 +50,14 @@ function IrcClient:_get_ip(host)
     return actual_addr
 end
 
-function IrcClient:_connect_to_irc()
-    print("TCP#connect_to_irc FIRST LINE")
+function TcpClient:_connect_to_irc()
     self.client = vim.loop.new_tcp()
 
     local ip = self:_get_ip(self.host)
 
     self.state = states.connecting
 
-    print("TCP#connect_to_irc", ip, self.host)
     self.client:connect(ip, tonumber(self.port), function (err)
-        print("CONNECTED!!", ip, self.host)
         if self.state ~= states.connecting then
             return
         end
@@ -74,6 +71,7 @@ function IrcClient:_connect_to_irc()
         self.state = states.connected
 
         self.client:read_start(vim.schedule_wrap(function(_, chunk)
+            print("READ_START:", chunk)
             if chunk == nil then
                 self:_callback("disconnected", nil)
                 return
@@ -95,15 +93,15 @@ function IrcClient:_connect_to_irc()
     end)
 end
 
-function IrcClient:isError()
+function TcpClient:isError()
     return self.state == states.error
 end
 
-function IrcClient:isTimeout()
+function TcpClient:isTimeout()
     return self.state == states.timedout
 end
 
-function IrcClient:disconnect()
+function TcpClient:disconnect()
     if self.state == states.connecting then
         self.state = states.disconnected
     end
@@ -117,7 +115,7 @@ function IrcClient:disconnect()
     self.client = nil
 end
 
-function IrcClient:connect()
+function TcpClient:connect()
     if self.state ~= states.disconnected then
         return
     end
@@ -125,7 +123,7 @@ function IrcClient:connect()
     self:_connect_to_irc()
 end
 
-function IrcClient:on(event, callback)
+function TcpClient:on(event, callback)
     if self.callbacks[event] == nil then
         self.callbacks[event] = {}
     end
@@ -133,27 +131,17 @@ function IrcClient:on(event, callback)
     table.insert(self.callbacks[event], callback);
 end
 
-local join_command = ":%s JOIN\r\n"
-function IrcClient:join(name)
-    self:_write(string.format(join_command, name))
-end
+function TcpClient:write(str)
+    if type(str) ~= "string" then
+        print("WHAT THE EFF CHARLIE")
+    end
 
-function IrcClient:_write(str)
     if self.state ~= states.connected then
-        return
+        return 0
     end
 
     self.client:write(str)
+    return 1
 end
 
-local msg_command = ":%s PRIVMSG %s :%s\r\n"
-function IrcClient:msg(name, str)
-    if self.state ~= states.connected then
-        return
-    end
-
-    local host = string.format("%s:%d", self.host, self.port)
-    self.client:write(string.format(msg_command, name, host, str))
-end
-
-return IrcClient
+return TcpClient
