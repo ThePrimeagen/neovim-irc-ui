@@ -26,7 +26,7 @@ function Irc_multi_client(n)
             local client = next[idx]
 
             print("Idx", idx, client)
-            client.tcpClient:msg(client.name, string.format("HELLO %d", next_idx))
+            client.ircClient:msg(client.name, string.format("HELLO %d", next_idx))
         end)
     end))
 end
@@ -40,4 +40,20 @@ function Irc_single_client_global()
     IRCClient:open_irc()
 end
 
+function parse_to_token_test()
+    local test = "foo bar baz"
+    print("HERE?")
+    local res = parse_to_token(test, 1, " ")
+    print(vim.inspect(res))
 
+    print(type(res.offset), res.offset)
+    res = parse_to_token(test, res.offset, " ")
+    print(vim.inspect(res))
+end
+
+function parse_irc_message_test()
+    print(vim.inspect(parse_irc_message(":foo PRIVMSG bar :test\r\n")))
+    print(vim.inspect(parse_irc_message(":foo JOIN\r\n")))
+    print(vim.inspect(parse_irc_message(":foo PONG\r\n")))
+    print(vim.inspect(parse_irc_message(":foo PING\r\n")))
+end

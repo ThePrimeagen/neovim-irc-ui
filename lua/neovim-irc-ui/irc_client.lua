@@ -28,6 +28,7 @@ end
 local IrcClient = {}
 function IrcClient:new(name)
     local obj = {
+        partial_message = "",
         neovimIrcData = {},
         tcpClient = nil,
         name = name,
@@ -57,13 +58,92 @@ function IrcClient:_callback(event, ...)
     end
 end
 
+function parse_to_token(line, offset, token)
+
+    local start = string.find(line, token, offset, false)
+    if start == nil then
+        return nil
+    end
+
+    return {
+        item = line:sub(offset, start - 1),
+        offset = start + 1,
+    }
+end
+
+function parse_irc_message(line)
+    local pos = 1
+    local to = ""
+    local from = ""
+    local params = ""
+    local cmd = ""
+
+    -- parse out name
+    local results = parse_to_token(line, pos, " ")
+    if results == nil then
+        return nil
+    end
+    pos = results.offset
+    from = results.item
+
+    local command_res = parse_to_token(line, pos, " ") or
+                        parse_to_token(line, pos, "\r\n")
+    print("command_res", command_res)
+    if command_res == nil then
+        return nil
+    end
+    pos = command_res.offset
+    cmd = command_res.item
+
+    if cmd == "JOIN" or cmd == "PING" then
+        -- TODO: TECHNICALLY THERE IS NO CHANNELS, but we don't support
+        return {
+            to = to,
+            from = from,
+            cmd = cmd,
+            params = params
+        }
+    elseif cmd ~= "PRIVMSG" then
+        return nil
+    end
+
+    local to_res = parse_to_token(line, pos, " ")
+    if to_res == nil then
+        return nil
+    end
+    pos = to_res.offset
+    to = to_res.item
+
+    if parse_to_token(line, pos, "\r\n") == nil then
+        return nil
+    end
+
+    params = line:sub(pos)
+
+    if line:sub(pos, pos) ~= ":" then
+        return nil
+    end
+
+    return {
+        to = to,
+        from = from,
+        cmd = cmd,
+        params = params
+    }
+end
 
 function IrcClient:process_irc_msg(line)
-    -- TODO: DO THIS BETTER...
-    -- You are not even aggregating the lines...
-    -- what are you doing.  If the chat is moving fast enough, you could
-    -- technically receive the 2 lines one message...
-    self:_callback("line", line)
+    local message = self.partial_message .. line
+    local start = nil
+
+    repeat
+        start = string.find(message, "\r\n", 1, false)
+        if start ~= nil then
+            self:_callback("line", line)
+            message = message:sub(start + 2)
+        end
+    until start == nil or #message == 0
+    self.partial_message = message
 end
 
 function IrcClient:open_irc()
