@@ -54,6 +54,10 @@ local function create_client()
     IrcWindow = Window:new()
 
     IrcClient:on("line", function(parsed)
+        if parsed == nil then
+            return
+        end
+
         if parsed.cmd == "JOIN" then
             IrcWindow:write_to_main({string.format("welcome %s!", parsed.from)})
             return
