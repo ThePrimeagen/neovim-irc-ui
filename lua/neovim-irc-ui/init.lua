@@ -1,7 +1,7 @@
 local Client = require("neovim-irc-ui.irc_client")
 local Window = require("neovim-irc-ui.ui")
 
-local punc = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~"
+local punc = "! \"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~"
 local alpha_numeric = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 local function valid_text(text)
