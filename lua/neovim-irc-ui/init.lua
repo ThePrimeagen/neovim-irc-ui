@@ -103,7 +103,7 @@ M.message = function(message)
         message = get_valid_text("Message to send: ")
     end
 
-    if not message or valid_text(message) then
+    if not message or not valid_text(message) then
         return
     end
 
