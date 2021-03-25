@@ -4,3 +4,7 @@ Client = require("neovim-irc-ui")
 
 Client.open()
 
+function ircm(message)
+    Client.message(message)
+end
+

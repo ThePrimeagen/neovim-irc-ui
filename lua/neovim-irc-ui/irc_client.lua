@@ -58,7 +58,7 @@ function IrcClient:_callback(event, ...)
     end
 end
 
-function parse_to_token(line, offset, token)
+local function parse_to_token(line, offset, token)
 
     local start = string.find(line, token, offset, false)
     if start == nil then
@@ -71,7 +71,7 @@ function parse_to_token(line, offset, token)
     }
 end
 
-function parse_irc_message(line)
+local function parse_irc_message(line)
     local pos = 1
     local to = ""
     local from = ""
@@ -88,7 +88,6 @@ function parse_irc_message(line)
 
     local command_res = parse_to_token(line, pos, " ") or
                         parse_to_token(line, pos, "\r\n")
-    print("command_res", command_res)
     if command_res == nil then
         return nil
     end
@@ -139,7 +138,7 @@ function IrcClient:process_irc_msg(line)
     repeat
         start = string.find(message, "\r\n", 1, false)
         if start ~= nil then
-            self:_callback("line", line)
+            self:_callback("line", parse_irc_message(line))
             message = message:sub(start + 2)
         end
     until start == nil or #message == 0
@@ -179,7 +178,6 @@ local msg_command = ":%s PRIVMSG %s :%s\r\n"
 function IrcClient:msg(str)
     local host = string.format("%s:%d", self.host, self.port)
     local msg = string.format(msg_command, self.name, host, str)
-    print("IRCClient:MSG", msg)
     if not self.tcpClient:write(msg) then
         -- what do i do here?
     end

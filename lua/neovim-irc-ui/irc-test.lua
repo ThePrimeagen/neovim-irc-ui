@@ -42,7 +42,6 @@ end
 
 function parse_to_token_test()
     local test = "foo bar baz"
-    print("HERE?")
     local res = parse_to_token(test, 1, " ")
     print(vim.inspect(res))
 
